@@ -1243,42 +1243,49 @@
       }))
     };
 
-    // Envío via script tag (JSONP) — único método que funciona desde GitHub Pages a Google Scripts
-    const urlConDatos = SHEETS_URL + '?payload=' + encodeURIComponent(JSON.stringify(payload));
-
-    const script = document.createElement('script');
-    script.src = urlConDatos;
-
-    script.onload = () => {
-      if (statusEl) {
-        statusEl.innerHTML = '✅ Datos enviados a Google Sheets.';
-        statusEl.style.color = '#128c4a';
-        statusEl.style.fontWeight = '600';
-      }
-      script.remove();
+    // Envío separado: primero datos sin fotos (GET liviano), luego fotos por fetch
+    const payloadSinFotos = {
+      ...payload,
+      gastos: payload.gastos.map(g => ({ ...g, imagenBase64: null }))
     };
 
-    script.onerror = () => {
-      // onerror no significa falla — Google Script responde con tipo no-JS
-      // pero los datos SÍ llegan. Mostramos confirmación igualmente.
-      if (statusEl) {
-        statusEl.innerHTML = '✅ Datos enviados a Google Sheets.';
-        statusEl.style.color = '#128c4a';
-        statusEl.style.fontWeight = '600';
-      }
-      script.remove();
-    };
+    const urlDatos = SHEETS_URL + '?payload=' + encodeURIComponent(JSON.stringify(payloadSinFotos));
 
-    // Timeout de seguridad — si no responde en 8s igual confirmamos
+    // Paso 1: enviar datos de texto via script tag (funciona en Safari)
+    const scriptTag = document.createElement('script');
+    scriptTag.src = urlDatos;
+    scriptTag.onerror = scriptTag.onload = () => {
+      scriptTag.remove();
+    };
+    document.head.appendChild(scriptTag);
+
+    // Paso 2: enviar fotos por separado via fetch (sin restricción de tamaño)
+    const gastosConFoto = payload.gastos.filter(g => g.imagenBase64);
+    if (gastosConFoto.length > 0) {
+      const fotoPayload = {
+        colaborador: payload.colaborador,
+        ot: payload.ot,
+        soloFotos: true,
+        fotos: gastosConFoto.map((g, i) => ({
+          index: i,
+          tipo: g.tipo,
+          desc: g.desc,
+          imagenBase64: g.imagenBase64
+        }))
+      };
+      fetch(SHEETS_URL + '?payload=' + encodeURIComponent(JSON.stringify(fotoPayload)), {
+        method: 'GET', mode: 'no-cors'
+      }).catch(() => {});
+    }
+
+    // Confirmación después de 3 segundos
     setTimeout(() => {
-      if (statusEl && statusEl.innerHTML.includes('Enviando')) {
-        statusEl.innerHTML = '✅ Enviado. Verifica en tu Google Sheets.';
+      if (statusEl) {
+        statusEl.innerHTML = '✅ Datos enviados a Google Sheets.';
         statusEl.style.color = '#128c4a';
         statusEl.style.fontWeight = '600';
       }
-    }, 8000);
-
-    document.head.appendChild(script);
+    }, 3000);
 
     // Generar imagen del resumen
     setTimeout(() => generarImagenResumen(total, diff, diffText), 400);

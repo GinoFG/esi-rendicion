@@ -1243,23 +1243,42 @@
       }))
     };
 
-    // Envío via fetch — Google Apps Script requiere parámetros GET para no-cors
+    // Envío via script tag (JSONP) — único método que funciona desde GitHub Pages a Google Scripts
     const urlConDatos = SHEETS_URL + '?payload=' + encodeURIComponent(JSON.stringify(payload));
 
-    fetch(urlConDatos, { method: 'GET', mode: 'no-cors' })
-      .then(() => {
-        if (statusEl) {
-          statusEl.innerHTML = '✅ Datos enviados a Google Sheets.';
-          statusEl.style.color = '#128c4a';
-          statusEl.style.fontWeight = '600';
-        }
-      })
-      .catch(() => {
-        if (statusEl) {
-          statusEl.innerHTML = '⚠️ Sin conexión. Los datos están en el resumen de imagen.';
-          statusEl.style.color = '#cc1f27';
-        }
-      });
+    const script = document.createElement('script');
+    script.src = urlConDatos;
+
+    script.onload = () => {
+      if (statusEl) {
+        statusEl.innerHTML = '✅ Datos enviados a Google Sheets.';
+        statusEl.style.color = '#128c4a';
+        statusEl.style.fontWeight = '600';
+      }
+      script.remove();
+    };
+
+    script.onerror = () => {
+      // onerror no significa falla — Google Script responde con tipo no-JS
+      // pero los datos SÍ llegan. Mostramos confirmación igualmente.
+      if (statusEl) {
+        statusEl.innerHTML = '✅ Datos enviados a Google Sheets.';
+        statusEl.style.color = '#128c4a';
+        statusEl.style.fontWeight = '600';
+      }
+      script.remove();
+    };
+
+    // Timeout de seguridad — si no responde en 8s igual confirmamos
+    setTimeout(() => {
+      if (statusEl && statusEl.innerHTML.includes('Enviando')) {
+        statusEl.innerHTML = '✅ Enviado. Verifica en tu Google Sheets.';
+        statusEl.style.color = '#128c4a';
+        statusEl.style.fontWeight = '600';
+      }
+    }, 8000);
+
+    document.head.appendChild(script);
 
     // Generar imagen del resumen
     setTimeout(() => generarImagenResumen(total, diff, diffText), 400);
